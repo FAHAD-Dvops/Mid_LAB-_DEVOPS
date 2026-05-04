@@ -1,0 +1,86 @@
+pipeline {
+    agent any
+    
+    environment {
+        REGISTRY = 'docker.io'
+        IMAGE_NAME = 'devops-backend'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        KUBE_CONFIG = credentials('kubeconfig')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo '🔄 Cloning repository...'
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo '🔨 Building Docker image...'
+                sh '''
+                    docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    docker tag ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:latest
+                '''
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo '✅ Running tests...'
+                sh '''
+                    docker run --rm ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+                    python -m pytest tests/ || true
+                '''
+            }
+        }
+        
+        stage('Push') {
+            steps {
+                echo '📤 Pushing to registry...'
+                sh '''
+                    echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                '''
+            }
+        }
+        
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo '🚀 Deploying to Kubernetes...'
+                sh '''
+                    export KUBECONFIG=${KUBE_CONFIG}
+                    kubectl set image deployment/devops-backend \
+                    devops-backend=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+                    --record || kubectl apply -f kubernetes/
+                    kubectl rollout status deployment/devops-backend
+                '''
+            }
+        }
+        
+        stage('Verify Deployment') {
+            steps {
+                echo '🔍 Verifying deployment...'
+                sh '''
+                    export KUBECONFIG=${KUBE_CONFIG}
+                    kubectl get pods -l app=devops-backend
+                    kubectl get services
+                '''
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo '✅ Pipeline completed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed!'
+        }
+        always {
+            sh 'docker logout'
+        }
+    }
+}

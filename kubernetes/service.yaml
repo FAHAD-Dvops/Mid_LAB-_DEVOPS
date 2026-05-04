@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-backend-service
+  namespace: default
+  labels:
+    app: devops-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: devops-backend
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-frontend-service
+  namespace: default
+  labels:
+    app: devops-frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app: devops-frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  sessionAffinity: ClientIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: devops-backend-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: devops-backend
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
