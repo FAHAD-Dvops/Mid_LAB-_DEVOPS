@@ -8,7 +8,7 @@ services:
       dockerfile: Dockerfile
     container_name: devops-backend
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       - ENVIRONMENT=production
       - FLASK_ENV=production
